@@ -17,13 +17,15 @@
 
 package org.apache.seatunnel.spark.sink
 
+import java.security.MessageDigest
+
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-
 import org.apache.seatunnel.common.config.{CheckResult, TypesafeConfigUtils}
 import org.apache.seatunnel.common.config.CheckConfigUtil.checkAllExists
 import org.apache.seatunnel.spark.SparkEnvironment
 import org.apache.seatunnel.spark.batch.SparkBatchSink
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.{Dataset, Row}
 
 class Doris extends SparkBatchSink with Serializable {
@@ -51,20 +53,31 @@ class Doris extends SparkBatchSink with Serializable {
       builder.substring(0, builder.length - 1)
     })
     dataFrame.foreachPartition { partition =>
+      val appId: String = env.getSparkSession.sparkContext.applicationId
+      val partitionId: Int = TaskContext.get().partitionId()
+      var index: Long = 0
       var count: Int = 0
       val buffer = new ListBuffer[String]
       val dorisUtil = new DorisUtil(propertiesMap.toMap, apiUrl, user, password)
       for (message <- partition) {
         count += 1
+        index += 1
         buffer += message
         if (count > batch_size) {
-          dorisUtil.saveMessages(buffer.mkString("\n"))
+          val label: String = getLabel(s"$appId,$partitionId,$index")
+          dorisUtil.saveMessages(buffer.mkString("\n"), label)
           buffer.clear()
           count = 0
         }
       }
       dorisUtil.saveMessages(buffer.mkString("\n"))
     }
+  }
+
+  def getLabel(label: String):String={
+    val md5: MessageDigest = MessageDigest.getInstance("MD5")
+    val encoded: Array[Byte] = md5.digest(label.getBytes)
+    encoded.map("%02x".format(_)).mkString
   }
 
   override def checkConfig(): CheckResult = {

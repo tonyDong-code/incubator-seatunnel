@@ -104,8 +104,11 @@ object DorisUtil extends Serializable {
 }
 
 class DorisUtil(httpHeader: Map[String, String], apiUrl: String, user: String, password: String) {
-  def saveMessages(messages: String): Unit = {
+  def saveMessages(messages: String, label: String = null): Unit = {
     val httpClient = DorisUtil.createClient
+    if (label != null){
+      httpHeader + ("label" -> label)
+    }
     val result = Try(DorisUtil.streamLoad(httpClient, httpHeader, messages, apiUrl, user, password))
     result match {
       case Success(_) => {
